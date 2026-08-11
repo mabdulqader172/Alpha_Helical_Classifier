@@ -1,0 +1,19 @@
+name: protein-alpha-classifier
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.11
+  - biopython=1.84
+  - pandas=2.2
+  - pyarrow=15
+  - requests=2.32
+  - mlflow=2.14
+  - scikit-learn=1.4
+  - bioconda::mmseqs2
+  - pip
+  - pip:
+      - ruff==0.4.10
+      - pytest==8.2.2
+      - pytest-cov==5.0.0
