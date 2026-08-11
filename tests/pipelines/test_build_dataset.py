@@ -1,11 +1,12 @@
 import pytest
+from pathlib import Path
+
 from protein_alpha_classifier.pipelines.build_dataset import (
     CANONICAL_COLUMNS,
     CL_ALPHA,
     _derive_label,
     _parse_annotations,
 )
-from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
@@ -43,22 +44,23 @@ def test_canonical_columns_present():
 
 
 # ---------------------------------------------------------------------------
-# Annotation parsing (duplicates)
+# Annotation parsing (space-separated, keyed by sequence_id)
 # ---------------------------------------------------------------------------
 
-def _make_ann(tmp_path: Path, lines: list[str]) -> Path:
-    header = (
-        "# test\n"
-        "FA-DOMID\tFA-PDBID\tFA-PDBREG\tFA-UNIID\tFA-UNIREG\t"
-        "SF-DOMID\tSF-PDBID\tSF-PDBREG\tSF-UNIID\tSF-UNIREG\tSCOPCLA\n"
-    )
+def _make_ann(tmp_path: Path, data_lines: list[str]) -> Path:
+    """Write a minimal SCOP annotation file (space-separated)."""
     p = tmp_path / "ann.txt"
-    p.write_text(header + "\n".join(lines) + "\n")
+    p.write_text("# test\n" + "\n".join(data_lines) + "\n")
     return p
 
 
+def _ann_line(fa_domid, uni_id, uni_reg, cl):
+    scopcla = f"TP=1,CL={cl},CF=2000000,SF=3000000,FA=4000000"
+    return f"{fa_domid} PDBID A:1-10 {uni_id} {uni_reg} 9000000 PDBID A:1-10 {uni_id} {uni_reg} {scopcla}"
+
+
 def test_parse_annotations_drops_duplicates(tmp_path):
-    row = "1\t1dlw\tA:2-45\tP0A7V8\t2-44\t1\t1dlw\tA:2-45\tP0A7V8\t2-44\tTP=PK,CL=1000000,CF=1000000,SF=1000000,FA=1000000"
+    row = _ann_line("8000001", "P0A7V8", "2-44", "1000000")
     p = _make_ann(tmp_path, [row, row])
     df, n_dup = _parse_annotations(p, "abc123", "http://example.com")
     assert n_dup == 1
@@ -67,9 +69,21 @@ def test_parse_annotations_drops_duplicates(tmp_path):
 
 
 def test_parse_annotations_label_source_records_provenance(tmp_path):
-    row = "1\t1dlw\tA:2-45\tP0A7V8\t2-44\t1\t1dlw\tA:2-45\tP0A7V8\t2-44\tTP=PK,CL=1000000,CF=1000000,SF=1000000,FA=1000000"
+    row = _ann_line("8000001", "P0A7V8", "2-44", "1000000")
     p = _make_ann(tmp_path, [row])
     df, _ = _parse_annotations(p, "deadbeef", "http://example.com/ann.txt")
     label_source = df.iloc[0]["label_source"]
     assert "deadbeef" in label_source
     assert "http://example.com/ann.txt" in label_source
+
+
+def test_parse_annotations_both_labels(tmp_path):
+    p = _make_ann(tmp_path, [
+        _ann_line("8000001", "P0A7V8", "2-44", "1000000"),
+        _ann_line("8000002", "Q9XYZ1", "1-50", "2000000"),
+    ])
+    df, _ = _parse_annotations(p, "x", "http://x")
+    alpha_rows = df[df["source_cl"] == "1000000"]
+    not_alpha_rows = df[df["source_cl"] != "1000000"]
+    assert len(alpha_rows) == 1
+    assert len(not_alpha_rows) == 1

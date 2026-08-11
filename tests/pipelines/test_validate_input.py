@@ -1,11 +1,7 @@
-import io
-import textwrap
+import pytest
 from pathlib import Path
 
 import pandas as pd
-import pytest
-from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
 
 from protein_alpha_classifier.pipelines.validate_input import (
     CANONICAL_ALPHABET,
@@ -33,7 +29,6 @@ def test_invalid_symbols_detects_ambiguous():
 
 
 def test_invalid_symbols_detects_lowercase():
-    # sequences are uppercased before calling this; lowercase is still invalid
     assert _invalid_symbols("acde") == ["a", "c", "d", "e"]
 
 
@@ -51,55 +46,70 @@ def test_sequence_id_regex_valid(sid):
 
 
 @pytest.mark.parametrize("sid", [
-    "P0A7V8_0_44",      # start = 0 (must be >= 1)
-    "P0A7V8_2",         # missing end
-    "P0A7V8",           # missing both positions
-    "p0a7v8_2_44",      # lowercase UniProt ID
-    "P0A7V8_2_0",       # end = 0
-    "_2_44",            # no UniProt prefix
+    "P0A7V8_0_44",   # start = 0
+    "P0A7V8_2",      # missing end
+    "P0A7V8",        # missing both positions
+    "p0a7v8_2_44",   # lowercase
+    "P0A7V8_2_0",    # end = 0
+    "_2_44",         # no prefix
 ])
 def test_sequence_id_regex_rejects_invalid(sid):
     assert not SEQUENCE_ID_RE.match(sid)
 
 
 # ---------------------------------------------------------------------------
-# Annotation parsing
+# Annotation parsing (space-separated, keyed by FA-DOMID)
 # ---------------------------------------------------------------------------
 
-def _make_annotation_file(tmp_path: Path, lines: list[str]) -> Path:
-    content = "# SCOP-CLA test\nFA-DOMID\tFA-PDBID\tFA-PDBREG\tFA-UNIID\tFA-UNIREG\tSF-DOMID\tSF-PDBID\tSF-PDBREG\tSF-UNIID\tSF-UNIREG\tSCOPCLA\n"
-    content += "\n".join(lines) + "\n"
+def _make_annotation_file(tmp_path: Path, data_lines: list[str]) -> Path:
+    """Write a minimal SCOP annotation file (space-separated, comment header)."""
+    content = "# SCOP-CLA test\n" + "\n".join(data_lines) + "\n"
     p = tmp_path / "scop-cla.txt"
     p.write_text(content)
     return p
 
 
+def _ann_line(fa_domid, uni_id, uni_reg, cl):
+    """Build a valid annotation line with the given key fields."""
+    scopcla = f"TP=1,CL={cl},CF=2000000,SF=3000000,FA=4000000"
+    # 11 space-separated columns; SF columns mirror FA columns
+    return f"{fa_domid} PDBID A:1-10 {uni_id} {uni_reg} 9000000 PDBID A:1-10 {uni_id} {uni_reg} {scopcla}"
+
+
 def test_parse_annotations_basic(tmp_path):
     p = _make_annotation_file(tmp_path, [
-        "1\t1dlw\tA:2-45\tP0A7V8\t2-44\t1\t1dlw\tA:2-45\tP0A7V8\t2-44\tTP=PK,CL=1000000,CF=1000000,SF=1000000,FA=1000000",
-        "2\t2abc\tA:1-50\tQ9XYZ1\t1-50\t2\t2abc\tA:1-50\tQ9XYZ1\t1-50\tTP=PK,CL=2000000,CF=2000000,SF=2000000,FA=2000000",
+        _ann_line("8000001", "P0A7V8", "2-44", "1000000"),
+        _ann_line("8000002", "Q9XYZ1", "1-50", "2000000"),
     ])
     records, skipped = _parse_annotations(p)
-    assert "P0A7V8_2_44" in records
-    assert records["P0A7V8_2_44"][0] == "1000000"
-    assert "Q9XYZ1_1_50" in records
-    assert records["Q9XYZ1_1_50"][0] == "2000000"
     assert skipped == 0
+    assert "8000001" in records
+    assert records["8000001"] == ("1000000", records["8000001"][1], "P0A7V8", "2", "44")
+    assert "8000002" in records
+    assert records["8000002"][0] == "2000000"
 
 
 def test_parse_annotations_skips_malformed_unireg(tmp_path):
-    p = _make_annotation_file(tmp_path, [
-        "1\t1dlw\tA:2-45\tP0A7V8\tBAD\t1\t1dlw\tA:2-45\tP0A7V8\tBAD\tTP=PK,CL=1000000,CF=1000000,SF=1000000,FA=1000000",
-    ])
+    line = "8000001 PDBID A:1-10 P0A7V8 BAD 9 PDBID A:1-10 P0A7V8 BAD TP=1,CL=1000000,CF=2,SF=3,FA=4"
+    p = _make_annotation_file(tmp_path, [line])
     records, skipped = _parse_annotations(p)
     assert len(records) == 0
     assert skipped == 1
 
 
 def test_parse_annotations_skips_missing_cl(tmp_path):
-    p = _make_annotation_file(tmp_path, [
-        "1\t1dlw\tA:2-45\tP0A7V8\t2-44\t1\t1dlw\tA:2-45\tP0A7V8\t2-44\tTP=PK",
-    ])
+    line = "8000001 PDBID A:1-10 P0A7V8 2-44 9 PDBID A:1-10 P0A7V8 2-44 TP=1"
+    p = _make_annotation_file(tmp_path, [line])
     records, skipped = _parse_annotations(p)
     assert len(records) == 0
     assert skipped == 1
+
+
+def test_parse_annotations_skips_comment_lines(tmp_path):
+    p = _make_annotation_file(tmp_path, [
+        "# this is a comment",
+        _ann_line("8000001", "P0A7V8", "2-44", "1000000"),
+    ])
+    records, skipped = _parse_annotations(p)
+    assert len(records) == 1
+    assert skipped == 0

@@ -20,31 +20,30 @@ CL_RE = re.compile(r"CL=(\d+)")
 UNIREG_RE = re.compile(r"^(\d+)-(\d+)$")
 
 
-def _parse_annotations(path: Path) -> dict[str, tuple[str, str]]:
-    """Return {sequence_id: (source_cl, raw_scopcla)} parsed from the SCOP annotation file.
+def _parse_annotations(path: Path) -> tuple[dict[str, tuple[str, str, str, str, str]], int]:
+    """Return ({fa_domid: (source_cl, scopcla, uni_id, start, end)}, n_skipped).
 
-    Columns (tab-separated, 0-indexed):
-      3  FA-UNIID   UniProt accession
-      4  FA-UNIREG  residue range "start-end"
-      10 SCOPCLA    e.g. "TP=PK,CL=1000000,CF=1000000,SF=1000000,FA=1000000"
+    Annotation file format (space-separated, comment lines start with #):
+      col 0  FA-DOMID  — numeric domain identifier; joins to FASTA record.id
+      col 3  FA-UNIID  — UniProt accession
+      col 4  FA-UNIREG — residue range "start-end"
+      col 10 SCOPCLA   — e.g. "TP=1,CL=1000000,CF=...,SF=...,FA=..."
     """
-    records: dict[str, tuple[str, str]] = {}
+    records: dict[str, tuple[str, str, str, str, str]] = {}
     skipped = 0
     with path.open() as fh:
         for line in fh:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            # skip the column-header line
-            if line.startswith("FA-DOMID"):
-                continue
-            parts = line.split("\t")
+            parts = line.split()
             if len(parts) < 11:
                 skipped += 1
                 continue
-            uni_id = parts[3].strip()
-            uni_reg = parts[4].strip()
-            scopcla = parts[10].strip()
+            fa_domid = parts[0]
+            uni_id = parts[3]
+            uni_reg = parts[4]
+            scopcla = parts[10]
 
             m_reg = UNIREG_RE.match(uni_reg)
             if not m_reg:
@@ -57,9 +56,7 @@ def _parse_annotations(path: Path) -> dict[str, tuple[str, str]]:
                 skipped += 1
                 continue
 
-            seq_id = f"{uni_id}_{start}_{end}"
-            # last writer wins on collision; build_dataset enforces the uniqueness contract
-            records[seq_id] = (m_cl.group(1), scopcla)
+            records[fa_domid] = (m_cl.group(1), scopcla, uni_id, start, end)
     return records, skipped
 
 
@@ -94,35 +91,57 @@ def main(argv: list[str] | None = None) -> None:
 
     for rec in SeqIO.parse(str(args.fasta), "fasta"):
         raw_count += 1
-        seq_id = rec.id
+        fa_domid = rec.id
         seq = str(rec.seq).upper()
 
-        base = {
-            "sequence_id": seq_id,
-            "fasta_checksum": fasta_checksum,
-            "ann_checksum": ann_checksum,
-            "pipeline_version": PIPELINE_VERSION,
-        }
-
-        if not SEQUENCE_ID_RE.match(seq_id):
-            omitted.append({**base, "rejection_reason": "malformed_sequence_id", "invalid_symbols": ""})
+        if fa_domid not in annotations:
+            omitted.append({
+                "sequence_id": fa_domid,
+                "rejection_reason": "no_annotation_match",
+                "invalid_symbols": "",
+                "fasta_checksum": fasta_checksum,
+                "ann_checksum": ann_checksum,
+                "pipeline_version": PIPELINE_VERSION,
+            })
             continue
 
-        if seq_id not in annotations:
-            omitted.append({**base, "rejection_reason": "no_annotation_match", "invalid_symbols": ""})
+        source_cl, scopcla, uni_id, start, end = annotations[fa_domid]
+        seq_id = f"{uni_id}_{start}_{end}"
+
+        if not SEQUENCE_ID_RE.match(seq_id):
+            omitted.append({
+                "sequence_id": seq_id,
+                "rejection_reason": "malformed_sequence_id",
+                "invalid_symbols": "",
+                "fasta_checksum": fasta_checksum,
+                "ann_checksum": ann_checksum,
+                "pipeline_version": PIPELINE_VERSION,
+            })
             continue
 
         bad = _invalid_symbols(seq)
         if bad:
-            omitted.append({**base, "rejection_reason": "noncanonical_residues", "invalid_symbols": ",".join(bad)})
+            omitted.append({
+                "sequence_id": seq_id,
+                "rejection_reason": "noncanonical_residues",
+                "invalid_symbols": ",".join(bad),
+                "fasta_checksum": fasta_checksum,
+                "ann_checksum": ann_checksum,
+                "pipeline_version": PIPELINE_VERSION,
+            })
             continue
 
+        # Rewrite header to sequence_id so downstream steps (MMseqs2, build_dataset) use it directly.
         eligible.append(SeqRecord(Seq(seq), id=seq_id, description=""))
 
     SeqIO.write(eligible, str(args.output_fasta), "fasta")
     pd.DataFrame(omitted).to_parquet(args.invalid_records, index=False)
 
-    alpha_count = sum(1 for r in eligible if annotations[r.id][0] == "1000000")
+    # alpha_count uses the fa_domid -> annotations lookup via seq_id reconstruction
+    seq_id_to_cl = {
+        f"{v[2]}_{v[3]}_{v[4]}": v[0] for v in annotations.values()
+    }
+    alpha_count = sum(1 for r in eligible if seq_id_to_cl.get(r.id) == "1000000")
     not_alpha_count = len(eligible) - alpha_count
     omit_reasons: dict[str, int] = {}
     for row in omitted:

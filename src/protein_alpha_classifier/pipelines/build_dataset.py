@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import sys
 from pathlib import Path
 
 import pandas as pd
@@ -31,9 +30,9 @@ def _parse_annotations(path: Path, ann_checksum: str, ann_url: str) -> tuple[pd.
     with path.open() as fh:
         for line in fh:
             line = line.strip()
-            if not line or line.startswith("#") or line.startswith("FA-DOMID"):
+            if not line or line.startswith("#"):
                 continue
-            parts = line.split("\t")
+            parts = line.split()
             if len(parts) < 11:
                 continue
             uni_id = parts[3].strip()
