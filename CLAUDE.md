@@ -38,6 +38,7 @@ src/protein_alpha_classifier/
     validate_input.py      # eligibility filtering, emits eligible FASTA + omission parquet
     cluster_sequences.py   # runs MMseqs2, emits cluster_assignments.parquet + representatives.fasta
     build_dataset.py       # joins representatives to annotations, writes dataset.parquet
+    split_dataset.py       # stratified cluster-group split -> train/val/test parquets
   features/                # sequence-derived feature extractors (composition, length, etc.)
   models/                  # sklearn pipelines and estimators
   tracking.py              # MLflow logging helpers
@@ -98,6 +99,13 @@ python -m protein_alpha_classifier.pipelines.build_dataset \
   --annotations data/raw/scop/scop-cla-latest.txt \
   --cluster-assignments data/interim/mmseqs_30pct/cluster_assignments.parquet \
   --output data/processed/dataset.parquet
+
+python -m protein_alpha_classifier.pipelines.split_dataset \
+  --dataset data/processed/dataset.parquet \
+  --out-dir data/processed/splits \
+  --test-frac 0.15 \
+  --val-frac 0.15 \
+  --seed 42
 ```
 
 ## Experiment tracking
