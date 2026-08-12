@@ -39,6 +39,12 @@ src/protein_alpha_classifier/
     cluster_sequences.py   # runs MMseqs2, emits cluster_assignments.parquet + representatives.fasta
     build_dataset.py       # joins representatives to annotations, writes dataset.parquet
     split_dataset.py       # stratified cluster-group split -> train/val/test parquets
+  features/
+    composition.py         # AACompositionTransformer, LengthTransformer (stateless)
+  models/
+    baselines.py           # majority-class, length-LR, composition-LR sklearn pipelines
+  pipelines/
+    train_baselines.py     # fits baselines, 5-fold CV on train, logs everything to MLflow
   features/                # sequence-derived feature extractors (composition, length, etc.)
   models/                  # sklearn pipelines and estimators
   tracking.py              # MLflow logging helpers
@@ -106,6 +112,16 @@ python -m protein_alpha_classifier.pipelines.split_dataset \
   --test-frac 0.15 \
   --val-frac 0.15 \
   --seed 42
+```
+
+## Training baselines
+
+```bash
+python -m protein_alpha_classifier.pipelines.train_baselines \
+  --train data/processed/splits/train.parquet \
+  --val data/processed/splits/val.parquet \
+  --split-manifest data/processed/splits/split_manifest.json \
+  --source-manifest data/raw/scop/source_manifest.json
 ```
 
 ## Experiment tracking
