@@ -1,25 +1,42 @@
 # Alpha-Helical Sequence Classifier
 
-A reproducible, research-only binary classifier that predicts **alpha** or **not-alpha** from a raw amino-acid sequence, using the [SCOP](https://scop.mrc-lmb.cam.ac.uk/) structural database as ground truth.
+This project is a reproducible binary classifier for estimating whether a raw amino-acid sequence belongs to SCOP’s all-alpha structural class. It predicts **alpha** or **not-alpha** based on sequence-derived statistical features, with [SCOP](https://scop.mrc-lmb.cam.ac.uk/) serving as the structural ground-truth source.
 
-> **Scope:** This is a research prototype. Predictions are statistical associations derived from sequence composition — they do not imply structural determination, biological mechanism, or clinical utility.
+> **Note:** This respository also used to demonstrate my exposure to Claude Code and how to orchestrate a project end to end with Claude.
 
 ---
 
-## What it does
+## What is the objective?
 
-Given an amino-acid sequence, the classifier outputs a probability that the sequence belongs to SCOP's all-alpha class (`CL=1000000`). Two logistic-regression baselines are provided, differing only in feature representation:
+Given an amino-acid sequence, the classifier returns a probability that the sequence belongs to SCOP's all-alpha class (`CL=1000000`). The objective is to establish transparent, reproducible baseline models that test how much alpha-class signal can be captured using simple representations of amino-acid composition.
 
-| Baseline | Features | Dimensionality |
-|---|---|---|
-| Amino-Acid Freq | Fractional single-residue counts | 20 |
-| Dipeptide Freq | Fractional consecutive-pair counts | 400 |
+The project currently explores two logistic-regression baselines. They share the same training procedure but differ in how they encode the input sequence:
 
-Both models use L2 regularisation and balanced class weights to correct for the ~23 % alpha prevalence in training data.
+| Baseline Model       | Dimensionality |
+| -------------------- | -------------- |
+| Amino-Acid Frequency | 20             |
+| Dipeptide Frequency  | 400            |
+
+Both models use L2 regularisation and balanced class weights to account for the approximately 23% prevalence of alpha sequences in the training data. These choices provide a controlled comparison between a compact composition-based representation and a richer representation that captures local adjacent-residue patterns.
+
+---
+
+## Table of Models Evaluated
+
+| Model                | Val AUPRC | Val AUROC | Not-Alpha Recall | Alpha Recall |
+| -------------------- | --------- | --------- | ---------------- | ------------ |
+| Amino-Acid Frequency | 0.636     | 0.847     | 0.77             | 0.75         |
+| Dipeptide Frequency  | 0.655     | 0.858     | 0.79             | 0.77         |
+
+_This table is updated with each new model. Test-set results are withheld until final comparison._
 
 ---
 
 ## Data pipeline
+
+The dataset combines SCOP structural annotations with the corresponding FASTA sequences. Before model training, sequences are validated, clustered, labelled, and split so that closely related sequences do not appear across training and evaluation partitions.
+
+First, `validate_input` retains sequences composed of the canonical 20 amino acids and rewrites headers into a consistent form. Next, `cluster_sequences` uses MMseqs2 at 30% sequence identity to group related sequences. `build_dataset` joins cluster representatives with SCOP annotations to assign alpha or not-alpha labels, while `split_dataset` produces stratified, cluster-aware train, validation, and test sets. Finally, `train_baselines` evaluates the models with grouped cross-validation and records runs in MLflow.
 
 ```
 SCOP annotation + FASTA
@@ -42,45 +59,42 @@ SCOP annotation + FASTA
 
 **Dataset snapshot (current build)**
 
-| Partition | Sequences | Alpha | Not-Alpha |
-|---|---|---|---|
-| Train | 9,279 | 2,115 (22.8 %) | 7,164 (77.2 %) |
-| Val | 1,987 | 454 (22.8 %) | 1,533 (77.2 %) |
-| Test | 1,987 | 454 (22.8 %) | 1,533 (77.2 %) |
+| Partition | Sequences | Alpha          | Not-Alpha      |
+| --------- | --------- | -------------- | -------------- |
+| Train     | 9,279     | 2,115 (22.8 %) | 7,164 (77.2 %) |
+| Val       | 1,987     | 454 (22.8 %)   | 1,533 (77.2 %) |
+| Test      | 1,987     | 454 (22.8 %)   | 1,533 (77.2 %) |
 
-Primary metric: **AUPRC** (preferred over AUROC when the positive class is uncommon).
+The primary evaluation metric is AUPRC, which is more informative than AUROC due to the class imbalance in the dataset as alpha helical sequences account for roughly 23% of each split.
 
 ---
 
-## Baseline performance
+## Baseline Performance
 
 ![Baseline comparison — ROC, PR curve, and normalised confusion matrix for both models](figures/baseline_comparison.png)
 
-*Confusion matrices are row-normalised (recall view). Each cell shows the fraction of true instances predicted in that column.*
+_Confusion matrices are row-normalised (recall view). Each cell shows the fraction of true instances predicted in that column._
 
-### Model comparison table
-
-| Model | Val AUPRC | Val AUROC | Not-Alpha Recall | Alpha Recall |
-|---|---|---|---|---|
-| Amino-Acid Freq (composition LR) | 0.636 | 0.847 | 0.77 | 0.75 |
-| Dipeptide Freq (dipeptide LR) | 0.655 | 0.858 | 0.79 | 0.77 |
-
-*This table is updated with each new model. Test-set results are withheld until final comparison.*
+The amino-acid-frequency model is the simpler baseline, representing each sequence using only the fractional composition of each of the 20 canonical residues. The dipeptide-frequency model extends this representation by measuring frequencies of consecutive amino-acid pairs. This gives it 400 features and allows it to capture (some...) local sequence context that single-residue composition misses. In the current validation results, that added information improves AUPRC, AUROC, and recall for both classes. The trade-off is higher dimensionality and reduced interpretability relative to the 20-feature composition model.
 
 ---
 
 ## Setup
+
+Create and activate the project environment with Conda:
 
 ```bash
 conda env create -f environment.yml
 conda activate protein-alpha-classifier
 ```
 
-Requires [MMseqs2](https://github.com/soedinglab/MMseqs2) (installed via `bioconda::mmseqs2`).
+The clustering stage requires [MMseqs2](https://github.com/soedinglab/MMseqs2), which is installed through bioconda.
 
 ---
 
 ## Running the pipeline
+
+Run the pipeline in the following order to download the SCOP inputs, construct the cluster-aware dataset, create splits, train the baselines, and regenerate the evaluation figure.
 
 ```bash
 # 1. Download SCOP sources
@@ -150,6 +164,8 @@ figures/           baseline_comparison.png / .pdf
 ```
 
 ## Development
+
+Run the following checks before contributing changes:
 
 ```bash
 ruff check src tests      # lint
