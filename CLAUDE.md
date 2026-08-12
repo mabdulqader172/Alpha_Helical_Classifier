@@ -39,15 +39,12 @@ src/protein_alpha_classifier/
     cluster_sequences.py   # runs MMseqs2, emits cluster_assignments.parquet + representatives.fasta
     build_dataset.py       # joins representatives to annotations, writes dataset.parquet
     split_dataset.py       # stratified cluster-group split -> train/val/test parquets
-  features/
-    composition.py         # AACompositionTransformer, LengthTransformer (stateless)
-  models/
-    baselines.py           # majority-class, length-LR, composition-LR sklearn pipelines
-  pipelines/
     train_baselines.py     # fits baselines, 5-fold CV on train, logs everything to MLflow
-  features/                # sequence-derived feature extractors (composition, length, etc.)
-  models/                  # sklearn pipelines and estimators
-  tracking.py              # MLflow logging helpers
+    make_figures.py        # publication 2×3 figure -> figures/baseline_comparison.{pdf,png}
+  features/
+    composition.py         # AACompositionTransformer, DipeptideCompositionTransformer (stateless)
+  models/
+    baselines.py           # composition-LR and dipeptide-LR sklearn pipelines + BASELINE_CONFIGS
 
 tests/                     # mirrors src layout; unit + integration tests
 
@@ -56,6 +53,7 @@ data/
   interim/                 # MMseqs2 outputs and intermediate FASTs (gitignored)
   processed/               # ML-ready dataset.parquet (gitignored)
 
+figures/                   # output figures (gitignored except .gitkeep)
 mlruns/                    # MLflow tracking store (gitignored)
 ```
 
@@ -123,6 +121,17 @@ python -m protein_alpha_classifier.pipelines.train_baselines \
   --split-manifest data/processed/splits/split_manifest.json \
   --source-manifest data/raw/scop/source_manifest.json
 ```
+
+## Figures
+
+```bash
+python -m protein_alpha_classifier.pipelines.make_figures \
+  --train data/processed/splits/train.parquet \
+  --val   data/processed/splits/val.parquet \
+  --out-dir figures/
+```
+
+Outputs `figures/baseline_comparison.pdf` and `figures/baseline_comparison.png`.
 
 ## Experiment tracking
 
