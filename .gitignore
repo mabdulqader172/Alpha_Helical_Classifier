@@ -12,3 +12,4 @@ build/
 mlflow.db
 figures/*.pdf
 figures/*.png
+!figures/baseline_comparison.png
