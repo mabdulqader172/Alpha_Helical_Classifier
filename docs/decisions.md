@@ -42,6 +42,19 @@ This document records durable scientific and operational decisions. Do not revis
 
 **Effect:** Do not claim structural determination, biological mechanism, causality, clinical utility, or biological function from predictions.
 
+## Baseline model set
+
+**Decision (2026-08-11):** Replace the original three baselines (majority-class, length-only LR, AA-composition LR) with two composition baselines:
+
+- Amino-acid composition + L2-regularised logistic regression (20 features)
+- Dipeptide composition + L2-regularised logistic regression (400 features)
+
+**Rationale:** Majority-class and length-only baselines provide negligible diagnostic signal beyond class prevalence. Dipeptide composition captures ordered pairwise residue context that monomer composition cannot, making it a more informative upper reference point for simple sequence features.
+
+**Effect:** `BASELINE_CONFIGS` in `models/baselines.py` now contains exactly these two entries. MLflow runs from the prior baseline set remain in history but must not be compared directly against new runs without labelling the version difference.
+
+**Migration:** No data or split changes required. Re-run `train_baselines.py` to produce new MLflow runs under the updated baseline set.
+
 ## Change procedure
 
 When changing any decision above:

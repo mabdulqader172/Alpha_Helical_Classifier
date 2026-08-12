@@ -49,3 +49,36 @@ class LengthTransformer(BaseEstimator, TransformerMixin):
 
     def get_feature_names_out(self, input_features=None):
         return np.array(["length"])
+
+
+# All 400 ordered AA pairs in fixed alphabetical order.
+DIPEPTIDE_ORDER: list[str] = [a + b for a in CANONICAL_AA for b in CANONICAL_AA]
+_DIPEPTIDE_INDEX: dict[str, int] = {dp: i for i, dp in enumerate(DIPEPTIDE_ORDER)}
+
+
+class DipeptideCompositionTransformer(BaseEstimator, TransformerMixin):
+    """Transform sequences into 400-dim fractional dipeptide-composition vectors.
+
+    Counts every consecutive ordered AA pair; divides by (len - 1).
+    Sequences shorter than 2 residues produce a zero vector.
+    """
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X) -> np.ndarray:
+        seqs = list(X)
+        out = np.zeros((len(seqs), 400), dtype=np.float64)
+        for i, seq in enumerate(seqs):
+            n = len(seq)
+            if n < 2:
+                continue
+            for k in range(n - 1):
+                j = _DIPEPTIDE_INDEX.get(seq[k : k + 2])
+                if j is not None:
+                    out[i, j] += 1
+            out[i] /= (n - 1)
+        return out
+
+    def get_feature_names_out(self, input_features=None):
+        return np.array([f"frac_{dp}" for dp in DIPEPTIDE_ORDER])

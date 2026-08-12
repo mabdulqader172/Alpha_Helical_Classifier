@@ -22,9 +22,10 @@ Models may use only declared sequence-derived features. Do not use UniProt IDs, 
 
 Start every comparison with these sequence-only baselines:
 
-- Majority class
-- Length-only baseline
 - Amino-acid composition plus regularized logistic regression
+- Dipeptide composition plus regularized logistic regression
+
+**Rationale (2026-08-11):** Majority-class and length-only baselines were removed because they provide minimal diagnostic value beyond AUPRC prevalence and composition features. Dipeptide composition captures local pairwise residue context that monomer composition cannot, making it a more informative second reference point.
 
 Evaluate more complex models under the identical split and reporting protocol.
 

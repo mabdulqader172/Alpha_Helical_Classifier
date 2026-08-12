@@ -282,9 +282,8 @@ def main(argv: list[str] | None = None) -> None:
                 model,
                 name="model",
                 skops_trusted_types=[
-                    "protein_alpha_classifier.features.composition.LengthTransformer",
                     "protein_alpha_classifier.features.composition.AACompositionTransformer",
-                    "sklearn.dummy.DummyClassifier",
+                    "protein_alpha_classifier.features.composition.DipeptideCompositionTransformer",
                     "sklearn.linear_model._logistic.LogisticRegression",
                     "sklearn.preprocessing._data.StandardScaler",
                     "sklearn.pipeline.Pipeline",
