@@ -220,6 +220,7 @@ def main(argv: list[str] | None = None) -> None:
                 "feature_type": cfg["feature_type"],
                 "classifier": type(model).__name__ if not hasattr(model, "steps") else type(model[-1]).__name__,
                 "C": cfg["params"].get("C", "n/a"),
+                "class_weight": cfg["params"].get("class_weight", "none"),
                 "cv_folds": args.cv_folds,
                 "threshold": args.threshold,
                 "seed": args.seed,

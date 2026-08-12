@@ -74,14 +74,15 @@ def _draw_pr(ax, y_true, y_prob, row, auprc):
 def _draw_cm(ax, y_true, y_prob, row, threshold):
     y_pred = (y_prob >= threshold).astype(int)
     cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
-    im = ax.imshow(cm, cmap="Blues", aspect="auto")
-    thresh = cm.max() / 2.0
+    cm_norm = cm.astype(float) / cm.sum(axis=1, keepdims=True)
+    im = ax.imshow(cm_norm, cmap="Blues", aspect="auto", vmin=0, vmax=1)
+    thresh = 0.5
     for i in range(2):
         for j in range(2):
             ax.text(
-                j, i, f"{cm[i, j]:,}",
+                j, i, f"{cm_norm[i, j]:.2f}",
                 ha="center", va="center", fontsize=9,
-                color="white" if cm[i, j] > thresh else "black",
+                color="white" if cm_norm[i, j] > thresh else "black",
             )
     ax.set_xticks([0, 1])
     ax.set_xticklabels(["Not Alpha", "Alpha"])

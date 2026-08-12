@@ -15,21 +15,23 @@ from protein_alpha_classifier.features.composition import (
 DECISION_THRESHOLD = 0.5
 
 
-def composition_lr_pipeline(C: float = 1.0, seed: int = 42) -> Pipeline:
+def composition_lr_pipeline(C: float = 1.0, seed: int = 42, class_weight: str = "balanced") -> Pipeline:
     """L2-regularised logistic regression on 20-dim AA fractional composition."""
     return Pipeline([
         ("features", AACompositionTransformer()),
         ("scaler", StandardScaler()),
-        ("clf", LogisticRegression(C=C, max_iter=2000, random_state=seed, solver="lbfgs")),
+        ("clf", LogisticRegression(C=C, class_weight=class_weight,
+                                   max_iter=2000, random_state=seed, solver="lbfgs")),
     ])
 
 
-def dipeptide_lr_pipeline(C: float = 1.0, seed: int = 42) -> Pipeline:
+def dipeptide_lr_pipeline(C: float = 1.0, seed: int = 42, class_weight: str = "balanced") -> Pipeline:
     """L2-regularised logistic regression on 400-dim dipeptide fractional composition."""
     return Pipeline([
         ("features", DipeptideCompositionTransformer()),
         ("scaler", StandardScaler()),
-        ("clf", LogisticRegression(C=C, max_iter=2000, random_state=seed, solver="lbfgs")),
+        ("clf", LogisticRegression(C=C, class_weight=class_weight,
+                                   max_iter=2000, random_state=seed, solver="lbfgs")),
     ])
 
 
@@ -38,12 +40,12 @@ BASELINE_CONFIGS: list[dict] = [
         "name": "composition_lr",
         "feature_type": "aa_composition",
         "factory": composition_lr_pipeline,
-        "params": {"C": 1.0},
+        "params": {"C": 1.0, "class_weight": "balanced"},
     },
     {
         "name": "dipeptide_lr",
         "feature_type": "dipeptide_composition",
         "factory": dipeptide_lr_pipeline,
-        "params": {"C": 1.0},
+        "params": {"C": 1.0, "class_weight": "balanced"},
     },
 ]

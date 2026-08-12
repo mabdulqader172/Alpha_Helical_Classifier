@@ -55,6 +55,16 @@ This document records durable scientific and operational decisions. Do not revis
 
 **Migration:** No data or split changes required. Re-run `train_baselines.py` to produce new MLflow runs under the updated baseline set.
 
+## Balanced class weighting
+
+**Decision (2026-08-11):** Both logistic regression baselines use `class_weight="balanced"`.
+
+**Rationale:** Alpha sequences are ~23% of training data. Without weighting, the cross-entropy optimiser is biased toward the majority class, suppressing alpha recall and AUPRC. Balanced weighting causes sklearn to scale per-sample loss by `n_samples / (n_classes × class_count)`, giving alpha examples proportionally more influence.
+
+**Effect:** The `class_weight` parameter is declared in `BASELINE_CONFIGS` params and logged to every MLflow run. MLflow runs produced before this change used `class_weight=None` and must not be compared against new runs without labelling the version difference.
+
+**Migration:** Re-run `train_baselines.py` to produce updated MLflow runs under the new configuration.
+
 ## Change procedure
 
 When changing any decision above:
